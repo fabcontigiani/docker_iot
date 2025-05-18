@@ -1,6 +1,8 @@
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
 import logging, os
+import asyncio, aiomqtt, ssl, certifi
+from functools import partial
 
 token=os.environ["TB_TOKEN"]
 autorizados=[int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')]
@@ -8,6 +10,11 @@ autorizados=[int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')]
 ELIGIENDO, SETPOINT, MODO, PERIODO, RELE = range(5)
 
 logging.basicConfig(format='%(asctime)s - TelegramBot - %(levelname)s - %(message)s', level=logging.INFO)
+
+tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+tls_context.verify_mode = ssl.CERT_REQUIRED
+tls_context.check_hostname = True
+tls_context.load_default_certs()
 
 async def sin_autorizacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("intento de conexión de: " + str(update.message.from_user.id))
@@ -86,8 +93,8 @@ async def cancelar(update: Update, context):
     logging.info("Configuración cancelada")
     return ConversationHandler.END
 
-async def destello(update: Update, context):
-    #TODO: implementar mensaje MQTT
+async def destello(update: Update, context, cliente_mqtt):
+    await cliente_mqtt.publish("destello", '{"destello": 1}')
     await update.message.reply_text("Se disparó el destello")
 
 async def setpoint(update: Update, context):
@@ -130,29 +137,47 @@ async def rele(update: Update, context):
         await update.message.reply_text("Error: estado de rele no válido.")
     return ConversationHandler.END
 
-def main():
-    logging.info(autorizados)
-    application = Application.builder().token(token).build()
-    application.add_handler(MessageHandler((~filters.User(autorizados)), sin_autorizacion))
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('acercade', acercade))
-    application.add_handler(CommandHandler('destello', destello))
+async def main():
+    logging.info("Iniciando bot")
+    logging.info(f"Usuarios autorizados: {autorizados}")
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('configurar', configurar)],
-        states={
-            ELIGIENDO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), eligiendo)],
-            SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), setpoint)],
-            MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), modo)],
-            PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), periodo)],
-            RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), rele)],
-        },
-        fallbacks=[MessageHandler(filters.Regex("^cancelar$"), cancelar)]
-    )
+    async with aiomqtt.Client(
+        os.environ["SERVIDOR"],
+        username=os.environ["MQTT_USR"],
+        password=os.environ["MQTT_PASS"],
+        port=int(os.environ["PUERTO_MQTTS"]),
+        tls_context=tls_context,
+    ) as client_mqtt:
+        application = Application.builder().token(token).build()
+        application.add_handler(MessageHandler((~filters.User(autorizados)), sin_autorizacion))
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(CommandHandler('acercade', acercade))
+        application.add_handler(CommandHandler('destello', partial(destello, cliente_mqtt=client_mqtt)))
 
-    application.add_handler(conv_handler)
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('configurar', configurar)],
+            states={
+                ELIGIENDO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), eligiendo)],
+                SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), setpoint)],
+                MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), modo)],
+                PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), periodo)],
+                RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), rele)],
+            },
+            fallbacks=[MessageHandler(filters.Regex("^cancelar$"), cancelar)]
+        )
 
-    application.run_polling()
+        application.add_handler(conv_handler)
+
+        async with application:  # Calls `initialize` and `shutdown`
+            await application.start()
+            await application.updater.start_polling()
+            while True:
+                try:
+                    await asyncio.sleep(1)
+                except:
+                    break
+            await application.updater.stop()
+            await application.stop()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
