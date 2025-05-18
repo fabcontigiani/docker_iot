@@ -97,41 +97,47 @@ async def destello(update: Update, context, cliente_mqtt):
     await cliente_mqtt.publish("destello", '{"destello": 1}')
     await update.message.reply_text("Se disparó el destello")
 
-async def setpoint(update: Update, context):
+async def setpoint(update: Update, context, cliente_mqtt):
     logging.info("Llamada a callback de setpoint")
     try:
         setpoint = float(update.message.text)
+        await cliente_mqtt.publish("setpoint", f'{{"setpoint": {setpoint}}}')
         await update.message.reply_text(f"Setpoint configurado a {setpoint}")
     except ValueError:
         await update.message.reply_text("Error: el valor ingresado no es un número válido.")
     return ConversationHandler.END
 
-async def modo(update: Update, context):
+async def modo(update: Update, context, cliente_mqtt):
     modo = update.message.text
     logging.info(f"Llamada a callback de modo: {modo}")
     if 'automático' in modo:
+        await cliente_mqtt.publish("modo", '{"modo": "automatico"}')
         await update.message.reply_text(f"Modo configurado a {modo}")
     elif 'manual' in modo:
+        await cliente_mqtt.publish("modo", '{"modo": "manual"}')
         await update.message.reply_text(f"Modo configurado a {modo}")
     else:
         await update.message.reply_text("Error: modo no válido.")
     return ConversationHandler.END
 
-async def periodo(update: Update, context):
+async def periodo(update: Update, context, cliente_mqtt):
     periodo = update.message.text
     logging.info(f"Llamada a callback de periodo: {periodo}")
     if periodo.isdigit():
+        await cliente_mqtt.publish("periodo", f'{{"periodo": {periodo}}}')
         await update.message.reply_text(f"Periodo configurado a {periodo}")
     else:
         await update.message.reply_text("Error: periodo no válido.")
     return ConversationHandler.END
 
-async def rele(update: Update, context):
+async def rele(update: Update, context, cliente_mqtt):
     rele = update.message.text
     logging.info(f"Llamada a callback de rele: {rele}")
     if 'cerrado' in rele:
+        await cliente_mqtt.publish("rele", '{"rele": 1}')
         await update.message.reply_text(f"Rele configurado a {rele}")
     elif 'abierto' in rele:
+        await cliente_mqtt.publish("rele", '{"rele": 0}')
         await update.message.reply_text(f"Rele configurado a {rele}")
     else:
         await update.message.reply_text("Error: estado de rele no válido.")
@@ -158,10 +164,10 @@ async def main():
             entry_points=[CommandHandler('configurar', configurar)],
             states={
                 ELIGIENDO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), eligiendo)],
-                SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), setpoint)],
-                MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), modo)],
-                PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), periodo)],
-                RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), rele)],
+                SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(setpoint, cliente_mqtt=client_mqtt))],
+                MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(modo, cliente_mqtt=client_mqtt))],
+                PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(periodo, cliente_mqtt=client_mqtt))],
+                RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(rele, cliente_mqtt=client_mqtt))],
             },
             fallbacks=[MessageHandler(filters.Regex("^cancelar$"), cancelar)]
         )
@@ -174,7 +180,8 @@ async def main():
             while True:
                 try:
                     await asyncio.sleep(1)
-                except:
+                except Exception as e: # incluye KeyboardInterrupt
+                    logging.info(f"Bot detenido: {e}")
                     break
             await application.updater.stop()
             await application.stop()
