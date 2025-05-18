@@ -1,4 +1,4 @@
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
 import logging, os
 
@@ -81,7 +81,9 @@ async def eligiendo(update: Update, context):
         return ELIGIENDO
 
 async def cancelar(update: Update, context):
-    await context.bot.send_message(update.message.chat.id, text="Configuración cancelada")
+    await context.bot.send_message(update.message.chat.id, text="Configuración cancelada",
+                                   reply_markup=ReplyKeyboardRemove())
+    logging.info("Configuración cancelada")
     return ConversationHandler.END
 
 async def destello(update: Update, context):
