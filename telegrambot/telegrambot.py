@@ -52,7 +52,8 @@ async def eligiendo(update: Update, context):
     logging.info(f"Eligiendo: {update.message.text}")
     if 'setpoint' in update.message.text:
         logging.info("Se eligió setpoint")
-        await update.message.reply_text("Ingrese el nuevo setpoint (float)")
+        await update.message.reply_text("Ingrese el nuevo setpoint (float)",
+                                        reply_markup=ReplyKeyboardRemove())
         return SETPOINT
     elif 'modo' in update.message.text:
         logging.info("Se eligió modo")
@@ -64,7 +65,8 @@ async def eligiendo(update: Update, context):
                                         ))
         return MODO
     elif 'periodo' in update.message.text:
-        await update.message.reply_text("Ingrese el nuevo periodo (segundos, entero)")
+        await update.message.reply_text("Ingrese el nuevo periodo (segundos, entero)",
+                                        reply_markup=ReplyKeyboardRemove())
         return PERIODO
     elif 'rele' in update.message.text:
         logging.info("Se eligió rele")
@@ -112,12 +114,15 @@ async def modo(update: Update, context, cliente_mqtt):
     logging.info(f"Llamada a callback de modo: {modo}")
     if 'automático' in modo:
         await cliente_mqtt.publish("modo", '{"modo": "automatico"}')
-        await update.message.reply_text(f"Modo configurado a {modo}")
+        await update.message.reply_text(f"Modo configurado a {modo}",
+                                        reply_markup=ReplyKeyboardRemove())
     elif 'manual' in modo:
         await cliente_mqtt.publish("modo", '{"modo": "manual"}')
-        await update.message.reply_text(f"Modo configurado a {modo}")
+        await update.message.reply_text(f"Modo configurado a {modo}",
+                                        reply_markup=ReplyKeyboardRemove())
     else:
-        await update.message.reply_text("Error: modo no válido.")
+        await update.message.reply_text("Error: modo no válido.", 
+                                        reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def periodo(update: Update, context, cliente_mqtt):
@@ -135,12 +140,15 @@ async def rele(update: Update, context, cliente_mqtt):
     logging.info(f"Llamada a callback de rele: {rele}")
     if 'cerrado' in rele:
         await cliente_mqtt.publish("rele", '{"rele": 1}')
-        await update.message.reply_text(f"Rele configurado a {rele}")
+        await update.message.reply_text(f"Rele configurado a {rele}",
+                                        reply_markup=ReplyKeyboardRemove())
     elif 'abierto' in rele:
         await cliente_mqtt.publish("rele", '{"rele": 0}')
-        await update.message.reply_text(f"Rele configurado a {rele}")
+        await update.message.reply_text(f"Rele configurado a {rele}",
+                                        reply_markup=ReplyKeyboardRemove())
     else:
-        await update.message.reply_text("Error: estado de rele no válido.")
+        await update.message.reply_text("Error: estado de rele no válido.",
+                                        reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def main():
