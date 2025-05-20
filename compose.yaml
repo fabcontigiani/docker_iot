@@ -113,5 +113,6 @@ services:
       - TB_TOKEN=${TB_TOKEN}
       - TB_AUTORIZADOS=${TB_AUTORIZADOS}
       - PICO_ID=${PICO_ID}
+      - BOT_PASSWORD=${BOT_PASSWORD}
 volumes:
   portainer_data:

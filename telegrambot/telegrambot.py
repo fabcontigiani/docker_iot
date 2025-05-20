@@ -4,8 +4,9 @@ import logging, os
 import asyncio, aiomqtt, ssl, certifi
 
 token=os.environ["TB_TOKEN"]
-autorizados=[int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')]
+autorizados=filters.User([int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')])
 pico_id = os.environ["PICO_ID"]
+password = os.environ["BOT_PASSWORD"]
 
 ELIGIENDO, SETPOINT, MODO, PERIODO, RELE = range(5)
 
@@ -18,7 +19,13 @@ tls_context.load_default_certs()
 
 async def sin_autorizacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("intento de conexión de: " + str(update.message.from_user.id))
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="no autorizado")
+    if update.message.text == password:
+        autorizados.add_user_ids([update.message.from_user.id])
+        logging.info("se autorizó a: " + str(update.message.from_user.id))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Contraseña correcta, ahora está autorizado")
+    else:
+        logging.info("no autorizado: " + str(update.message.from_user.id))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Usuario no autorizado, escriba la contraseña para autorizarse")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(update)
@@ -153,10 +160,10 @@ async def rele(update: Update, context):
 
 async def main():
     logging.info("Iniciando bot")
-    logging.info(f"Usuarios autorizados: {autorizados}")
+    logging.info(f"Usuarios autorizados: {autorizados.user_ids}")
 
     application = Application.builder().token(token).build()
-    application.add_handler(MessageHandler((~filters.User(autorizados)), sin_autorizacion))
+    application.add_handler(MessageHandler((~autorizados), sin_autorizacion))
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('acercade', acercade))
     application.add_handler(CommandHandler('destello', destello))
