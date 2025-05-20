@@ -2,7 +2,6 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
 import logging, os
 import asyncio, aiomqtt, ssl, certifi
-from functools import partial
 
 token=os.environ["TB_TOKEN"]
 autorizados=[int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')]
@@ -96,29 +95,29 @@ async def cancelar(update: Update, context):
     logging.info("Configuración cancelada")
     return ConversationHandler.END
 
-async def destello(update: Update, context, cliente_mqtt):
-    await cliente_mqtt.publish(pico_id + "/destello", '{"destello": 1}')
+async def destello(update: Update, context):
+    await context.bot_data['mqtt_client'].publish(pico_id + "/destello", '{"destello": 1}')
     await update.message.reply_text("Se disparó el destello")
 
-async def setpoint(update: Update, context, cliente_mqtt):
+async def setpoint(update: Update, context):
     logging.info("Llamada a callback de setpoint")
     try:
         setpoint = float(update.message.text)
-        await cliente_mqtt.publish(pico_id + "/setpoint", f'{{"setpoint": {setpoint}}}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/setpoint", f'{{"setpoint": {setpoint}}}')
         await update.message.reply_text(f"Setpoint configurado a {setpoint}")
     except ValueError:
         await update.message.reply_text("Error: el valor ingresado no es un número válido.")
     return ConversationHandler.END
 
-async def modo(update: Update, context, cliente_mqtt):
+async def modo(update: Update, context):
     modo = update.message.text
     logging.info(f"Llamada a callback de modo: {modo}")
     if 'automático' in modo:
-        await cliente_mqtt.publish(pico_id + "/modo", '{"modo": "automatico"}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/modo", '{"modo": "automatico"}')
         await update.message.reply_text(f"Modo configurado a {modo}",
                                         reply_markup=ReplyKeyboardRemove())
     elif 'manual' in modo:
-        await cliente_mqtt.publish(pico_id + "/modo", '{"modo": "manual"}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/modo", '{"modo": "manual"}')
         await update.message.reply_text(f"Modo configurado a {modo}",
                                         reply_markup=ReplyKeyboardRemove())
     else:
@@ -126,25 +125,25 @@ async def modo(update: Update, context, cliente_mqtt):
                                         reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-async def periodo(update: Update, context, cliente_mqtt):
+async def periodo(update: Update, context):
     periodo = update.message.text
     logging.info(f"Llamada a callback de periodo: {periodo}")
     if periodo.isdigit():
-        await cliente_mqtt.publish(pico_id + "/periodo", f'{{"periodo": {periodo}}}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/periodo", f'{{"periodo": {periodo}}}')
         await update.message.reply_text(f"Periodo configurado a {periodo}")
     else:
         await update.message.reply_text("Error: periodo no válido.")
     return ConversationHandler.END
 
-async def rele(update: Update, context, cliente_mqtt):
+async def rele(update: Update, context):
     rele = update.message.text
     logging.info(f"Llamada a callback de rele: {rele}")
     if 'cerrado' in rele:
-        await cliente_mqtt.publish(pico_id + "/rele", '{"rele": 1}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/rele", '{"rele": 1}')
         await update.message.reply_text(f"Rele configurado a {rele}",
                                         reply_markup=ReplyKeyboardRemove())
     elif 'abierto' in rele:
-        await cliente_mqtt.publish(pico_id + "/rele", '{"rele": 0}')
+        await context.bot_data['mqtt_client'].publish(pico_id + "/rele", '{"rele": 0}')
         await update.message.reply_text(f"Rele configurado a {rele}",
                                         reply_markup=ReplyKeyboardRemove())
     else:
@@ -156,6 +155,26 @@ async def main():
     logging.info("Iniciando bot")
     logging.info(f"Usuarios autorizados: {autorizados}")
 
+    application = Application.builder().token(token).build()
+    application.add_handler(MessageHandler((~filters.User(autorizados)), sin_autorizacion))
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('acercade', acercade))
+    application.add_handler(CommandHandler('destello', destello))
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('configurar', configurar)],
+        states={
+            ELIGIENDO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), eligiendo)],
+            SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), setpoint)],
+            MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), modo)],
+            PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), periodo)],
+            RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), rele)],
+        },
+        fallbacks=[MessageHandler(filters.Regex("^cancelar$"), cancelar)]
+    )
+
+    application.add_handler(conv_handler)
+
     async with aiomqtt.Client(
         os.environ["SERVIDOR"],
         username=os.environ["MQTT_USR"],
@@ -163,29 +182,9 @@ async def main():
         port=int(os.environ["PUERTO_MQTTS"]),
         tls_context=tls_context,
     ) as client_mqtt:
-        application = Application.builder().token(token).build()
-        application.add_handler(MessageHandler((~filters.User(autorizados)), sin_autorizacion))
-        application.add_handler(CommandHandler('start', start))
-        application.add_handler(CommandHandler('acercade', acercade))
-        application.add_handler(CommandHandler('destello', partial(destello, cliente_mqtt=client_mqtt)))
-
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('configurar', configurar)],
-            states={
-                ELIGIENDO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), eligiendo)],
-                SETPOINT: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(setpoint, cliente_mqtt=client_mqtt))],
-                MODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(modo, cliente_mqtt=client_mqtt))],
-                PERIODO: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(periodo, cliente_mqtt=client_mqtt))],
-                RELE: [MessageHandler(filters.TEXT & ~(filters.COMMAND | filters.Regex("^cancelar$")), partial(rele, cliente_mqtt=client_mqtt))],
-            },
-            fallbacks=[MessageHandler(filters.Regex("^cancelar$"), cancelar)]
-        )
-
-        application.add_handler(conv_handler)
-
         async with application:  # Calls `initialize` and `shutdown`
             await application.start()
-            # TODO: agregar funcion asincronica para cargar el objeto cliente como un diccionario al context de la aplicacion
+            application.bot_data['mqtt_client'] = client_mqtt
             await application.updater.start_polling()
             while True:
                 try:
