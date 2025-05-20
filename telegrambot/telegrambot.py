@@ -6,6 +6,7 @@ from functools import partial
 
 token=os.environ["TB_TOKEN"]
 autorizados=[int(x) for x in os.environ["TB_AUTORIZADOS"].split(',')]
+pico_id = os.environ["PICO_ID"]
 
 ELIGIENDO, SETPOINT, MODO, PERIODO, RELE = range(5)
 
@@ -96,14 +97,14 @@ async def cancelar(update: Update, context):
     return ConversationHandler.END
 
 async def destello(update: Update, context, cliente_mqtt):
-    await cliente_mqtt.publish("destello", '{"destello": 1}')
+    await cliente_mqtt.publish(pico_id + "/destello", '{"destello": 1}')
     await update.message.reply_text("Se disparó el destello")
 
 async def setpoint(update: Update, context, cliente_mqtt):
     logging.info("Llamada a callback de setpoint")
     try:
         setpoint = float(update.message.text)
-        await cliente_mqtt.publish("setpoint", f'{{"setpoint": {setpoint}}}')
+        await cliente_mqtt.publish(pico_id + "/setpoint", f'{{"setpoint": {setpoint}}}')
         await update.message.reply_text(f"Setpoint configurado a {setpoint}")
     except ValueError:
         await update.message.reply_text("Error: el valor ingresado no es un número válido.")
@@ -113,11 +114,11 @@ async def modo(update: Update, context, cliente_mqtt):
     modo = update.message.text
     logging.info(f"Llamada a callback de modo: {modo}")
     if 'automático' in modo:
-        await cliente_mqtt.publish("modo", '{"modo": "automatico"}')
+        await cliente_mqtt.publish(pico_id + "/modo", '{"modo": "automatico"}')
         await update.message.reply_text(f"Modo configurado a {modo}",
                                         reply_markup=ReplyKeyboardRemove())
     elif 'manual' in modo:
-        await cliente_mqtt.publish("modo", '{"modo": "manual"}')
+        await cliente_mqtt.publish(pico_id + "/modo", '{"modo": "manual"}')
         await update.message.reply_text(f"Modo configurado a {modo}",
                                         reply_markup=ReplyKeyboardRemove())
     else:
@@ -129,7 +130,7 @@ async def periodo(update: Update, context, cliente_mqtt):
     periodo = update.message.text
     logging.info(f"Llamada a callback de periodo: {periodo}")
     if periodo.isdigit():
-        await cliente_mqtt.publish("periodo", f'{{"periodo": {periodo}}}')
+        await cliente_mqtt.publish(pico_id + "/periodo", f'{{"periodo": {periodo}}}')
         await update.message.reply_text(f"Periodo configurado a {periodo}")
     else:
         await update.message.reply_text("Error: periodo no válido.")
@@ -139,11 +140,11 @@ async def rele(update: Update, context, cliente_mqtt):
     rele = update.message.text
     logging.info(f"Llamada a callback de rele: {rele}")
     if 'cerrado' in rele:
-        await cliente_mqtt.publish("rele", '{"rele": 1}')
+        await cliente_mqtt.publish(pico_id + "/rele", '{"rele": 1}')
         await update.message.reply_text(f"Rele configurado a {rele}",
                                         reply_markup=ReplyKeyboardRemove())
     elif 'abierto' in rele:
-        await cliente_mqtt.publish("rele", '{"rele": 0}')
+        await cliente_mqtt.publish(pico_id + "/rele", '{"rele": 0}')
         await update.message.reply_text(f"Rele configurado a {rele}",
                                         reply_markup=ReplyKeyboardRemove())
     else:
@@ -184,6 +185,7 @@ async def main():
 
         async with application:  # Calls `initialize` and `shutdown`
             await application.start()
+            # TODO: agregar funcion asincronica para cargar el objeto cliente como un diccionario al context de la aplicacion
             await application.updater.start_polling()
             while True:
                 try:

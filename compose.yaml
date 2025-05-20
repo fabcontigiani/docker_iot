@@ -112,5 +112,6 @@ services:
       - TZ=America/Argentina/Buenos_Aires 
       - TB_TOKEN=${TB_TOKEN}
       - TB_AUTORIZADOS=${TB_AUTORIZADOS}
+      - PICO_ID=${PICO_ID}
 volumes:
   portainer_data:
