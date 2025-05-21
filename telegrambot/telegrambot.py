@@ -11,6 +11,7 @@ password = os.environ["BOT_PASSWORD"]
 ELIGIENDO, SETPOINT, MODO, PERIODO, RELE = range(5)
 
 logging.basicConfig(format='%(asctime)s - TelegramBot - %(levelname)s - %(message)s', level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 tls_context.verify_mode = ssl.CERT_REQUIRED
