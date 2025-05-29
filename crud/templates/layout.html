@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="{{ session.get('theme', 'light') }}">
 
 <head>
   <meta charset="UTF-8" />
   <title>FLASK CRUD 1.6</title>
   <!-- <link rel="stylesheet" href="https://bootswatch.com/5/cosmo/bootstrap.min.css"> -->
-  <link rel="stylesheet" href="https://bootswatch.com/5/darkly/bootstrap.min.css">
+  <link rel="stylesheet" href="https://bootswatch.com/5/zephyr/bootstrap.min.css">
   {% with messages = get_flashed_messages() %} {% if messages %}
   {% for message in messages %}
   <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -19,7 +19,14 @@
       <a class="navbar-brand" href="#">CRUD</a>
       {% if session.get("user_id") %}
       <div class="d-flex">
-        <div class="nav-item pe-3 pt-2">{{ session.get("user_id") }}</div>
+        <li class="nav-item dropdown" style="list-style: none;">
+          <a class="nav-link pe-3 pt-2 dropdown-toggle text-light" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">Tema</a>
+          <div class="dropdown-menu">
+            <a class="dropdown-item" href="{{ url_for('tema_claro') }}">Claro</a>
+            <a class="dropdown-item" href="{{ url_for('tema_oscuro') }}">Oscuro</a>
+          </div>
+        </li>
+        <div class="nav-item pe-3 pt-2 text-light">{{ session.get("user_id") }}</div>
         <a href="{{url_for('logout')}}" class="btn btn-secondary my-2 my-sm-0" type="submit">Salir</a>
       </div>
       {% endif %}

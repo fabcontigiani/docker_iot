@@ -145,3 +145,17 @@ def logout():
     session.clear()
     logging.info("el usuario {} cerró su sesión".format(session.get("user_id")))
     return redirect(url_for('index'))
+
+@app.route("/tema_claro", methods=["GET"])
+@require_login
+def tema_claro():
+    session["theme"] = "light"
+    logging.info("el usuario {} cambió a tema claro".format(session.get("user_id")))
+    return redirect(request.referrer or url_for('index'))
+
+@app.route("/tema_oscuro", methods=["GET"])
+@require_login
+def tema_oscuro():
+    session["theme"] = "dark"
+    logging.info("el usuario {} cambió a tema oscuro".format(session.get("user_id")))
+    return redirect(request.referrer or url_for('index'))
