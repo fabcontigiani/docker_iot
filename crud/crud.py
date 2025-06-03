@@ -1,9 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_mysqldb import MySQL
-import os, logging
+import os
+import logging
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
+import json
+import paho.mqtt.publish as mqtt_publish
+import ssl
+
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+ssl_context.check_hostname = True
+ssl_context.load_default_certs()
 
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -83,60 +92,40 @@ def login():
 @require_login
 def index():
     cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos')
-    datos = cur.fetchall()
+    cur.execute('SELECT sensor_id FROM sensores_remotos.mediciones GROUP BY sensor_id ORDER BY sensor_id ASC')
+    nodos = [nodo[0] for nodo in cur.fetchall()]
     cur.close()
-    return render_template('index.html', contactos = datos)
+    logging.info(f"se consultaron los nodos: {nodos}")
+    return render_template('index.html', nodos = nodos)
 
-@app.route('/add_contact', methods=['POST'])
+@app.route('/publish', methods=['POST'])
 @require_login
-def add_contact():
+def publish():
     if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO contactos (nombre, tel, email) VALUES (%s,%s,%s)"
-                    , (nombre, tel, email))
-        if mysql.connection.affected_rows():
-            flash('Se agregó un contacto')  # usa sesión
-            logging.info("se agregó un contacto")
-            mysql.connection.commit()
-    return redirect(url_for('index'))
-
-@app.route('/borrar/<string:id>', methods = ['GET'])
-@require_login
-def borrar_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = {0}'.format(id))
-    if mysql.connection.affected_rows():
-        flash('Se eliminó un contacto')  # usa sesión
-        logging.info("se eliminó un contacto")
-        mysql.connection.commit()
-    return redirect(url_for('index'))
-
-@app.route('/editar/<id>', methods = ['GET'])
-@require_login
-def conseguir_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos WHERE id = %s', (id,))
-    datos = cur.fetchone()
-    logging.info(datos)
-    return render_template('editar-contacto.html', contacto = datos)
-
-@app.route('/actualizar/<id>', methods=['POST'])
-@require_login
-def actualizar_contacto(id):
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE contactos SET nombre=%s, tel=%s, email=%s WHERE id=%s", (nombre, tel, email, id))
-    if mysql.connection.affected_rows():
-        flash('Se actualizó un contacto')  # usa sesión
-        logging.info("se actualizó un contacto")
-        mysql.connection.commit()
+        nodo = request.form.get('nodo-select')
+        comando = request.form.get('comando')
+        if comando == "destello":
+            mensaje = json.dumps({"destello": 1})
+        else:
+            mensaje = json.dumps({
+                "temperatura": float(request.form.get('temperatura'))})
+        try:
+            mqtt_publish.single(
+            topic=f"{nodo}/{comando}",
+            payload=mensaje,
+            hostname=os.environ["MQTT_HOST"],
+            port=int(os.environ["MQTT_PORT"]),
+            auth={
+                'username': os.environ["MQTT_USER"],
+                'password': os.environ["MQTT_PASSWORD"],
+            },
+            tls=ssl_context)
+        except Exception as e:
+            logging.error(f"Error al publicar en el nodo {nodo}: {repr(e)}.")
+            flash(f"Error al publicar en el nodo {nodo}: {e}.", "danger")
+            return redirect(url_for('index'))
+        flash("Mensaje publicado con éxito.", "success")
+        logging.info(f"se publicó un mensaje en '{nodo}/{comando}': {mensaje} ")
     return redirect(url_for('index'))
 
 @app.route("/logout")
